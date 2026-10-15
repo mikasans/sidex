@@ -29,6 +29,17 @@ name: Cloud build (no signing secrets)
 
 on:
   workflow_dispatch:
+    inputs:
+      platforms:
+        description: "Platforms to build (use macos for a single Apple Silicon DMG)"
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - linux
+          - windows
+          - macos
   push:
     tags: ['v*']
 
@@ -51,6 +62,7 @@ env:
 jobs:
   linux-x86_64:
     name: linux-x86_64
+    if: ${{ github.event_name == 'push' || github.event.inputs.platforms == 'all' || github.event.inputs.platforms == 'linux' }}
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v7
@@ -127,6 +139,7 @@ jobs:
 
   windows-x86_64:
     name: windows-x86_64
+    if: ${{ github.event_name == 'push' || github.event.inputs.platforms == 'all' || github.event.inputs.platforms == 'windows' }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -183,6 +196,7 @@ jobs:
 
   macos:
     name: macos-${{ matrix.arch }}
+    if: ${{ github.event_name == 'push' || github.event.inputs.platforms == 'all' || github.event.inputs.platforms == 'macos' }}
     strategy:
       fail-fast: false
       matrix:
@@ -282,7 +296,9 @@ jobs:
 
   release:
     name: attach to release
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Skip when a needed build was cancelled/failed; skipped platform jobs (macos-only
+    # dispatch) are fine — only tag pushes reach here and tags always build all three.
+    if: startsWith(github.ref, 'refs/tags/v') && !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     needs: [linux-x86_64, windows-x86_64, macos]
     runs-on: ubuntu-latest
     permissions:

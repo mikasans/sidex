@@ -6,7 +6,7 @@ Two clouds can build this tree. Neither needs a local toolchain.
 |---|---|---|
 | GitHub Actions — `build.yml` (upstream) | `cargo check` on Linux / macOS / Windows | push to `main`, PR (paths-filtered) |
 | GitHub Actions — `release.yml` (upstream) | the real release: `tauri build` × 6 targets, signing, Cloudflare R2 + updater manifest | tag `v*` or manual dispatch |
-| GitHub Actions — `cloud-build.yml` (added here) | unsigned Linux x86_64 + Windows x86_64 (`.zip` and an NSIS `-setup.exe`) and an unsigned macOS **`.dmg`** (Apple Silicon), as **workflow artifacts** | manual dispatch, or tag `v*` |
+| GitHub Actions — `cloud-build.yml` (added here) | unsigned Linux x86_64 + Windows x86_64 (`.zip` and an NSIS `-setup.exe`) and an unsigned macOS **`.dmg`** (Apple Silicon), as **workflow artifacts**; `workflow_dispatch` input `platforms` can limit to one OS | manual dispatch (`platforms=macos|linux|windows|all`), or tag `v*` |
 | CNB — `.cnb.yml` (added here) | `check` on push/PR; `linux-x86_64` release tarball published to the `dist/linux-x86_64` branch | push to `main`, PR |
 
 ## Getting a binary without any secrets
@@ -16,8 +16,10 @@ to R2 (`siden-assets`), so on a mirror without those secrets it will fail.
 `cloud-build.yml` is the no-secrets path:
 
 1. Actions tab → **Cloud build (no signing secrets)** → *Run workflow*, or
-2. `git tag v0.1.5 && git push origin v0.1.5` — the tag also attaches the files
-   to a GitHub Release.
+2. `gh workflow run cloud-build.yml -R mikasans/sidex --ref main -f platforms=macos`
+   for a **single Apple Silicon DMG** (other choices: `linux`, `windows`, `all`), or
+3. `git tag v0.1.5 && git push origin v0.1.5` — the tag also attaches the files
+   to a GitHub Release (always builds all three platforms).
 
 Artifacts land under the run’s **Artifacts** section: `sidex-linux-x86_64`
 (`.tar.gz`), `sidex-windows-x86_64` (`*-setup.exe`), and `sidex-macos-arm64`

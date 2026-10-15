@@ -178,17 +178,20 @@ for _ in $(seq 1 60); do
 done
 step "app.workbench" "$([ "$WORKBENCH_OK" = 1 ] && echo ok || echo fail)" "startup trace 'setup complete'"
 
+# Splash alone is ~150–180 distinct colours ("SideX / Loading workbench...").
+# A mounted workbench under Xvfb software GL is typically ~240+; on a real
+# display it is often 1000+. Threshold must clear the splash false-positive.
 PAINTED=0
 COLORS=0
-for _ in $(seq 1 60); do
+for _ in $(seq 1 90); do
   COLORS="$(ui_colors)"
-  if [ "${COLORS:-0}" -gt 100 ] 2>/dev/null; then PAINTED=1; break; fi
+  if [ "${COLORS:-0}" -gt 220 ] 2>/dev/null; then PAINTED=1; break; fi
   sleep 1
 done
 shot "01-startup.png"
-step "app.painted" "$([ "$PAINTED" = 1 ] && echo ok || echo fail)" "distinct colours on screen=$COLORS"
+step "app.painted" "$([ "$PAINTED" = 1 ] && echo ok || echo fail)" "distinct colours on screen=$COLORS (need >220 to clear splash)"
 if [ "$PAINTED" != 1 ]; then
-  echo "workbench never painted; see $OUT/01-startup.png and $OUT/app.log" >&2
+  echo "workbench never painted past splash; see $OUT/01-startup.png and $OUT/app.log" >&2
   exit 1
 fi
 
