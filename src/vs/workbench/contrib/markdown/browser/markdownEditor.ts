@@ -94,7 +94,7 @@ export class MarkdownEditorManager extends Disposable {
 	private _messageSecret = generateUuid();
 	private _editEpoch = 0;
 	private _applyingWebviewEdit = false;
-	private _readonly = true;
+	private _readonly = false;
 	private _ready = false;
 	/** Standalone panes (e.g. Markdown Diff sides) keyed by instance id. */
 	private readonly _standalone = new Map<
@@ -125,7 +125,7 @@ export class MarkdownEditorManager extends Disposable {
 		@ICodeEditorService private readonly _codeEditorService: ICodeEditorService
 	) {
 		super();
-		this._readonly = this._storageService.getBoolean(READONLY_STATE_KEY, StorageScope.PROFILE, true);
+		this._readonly = this._storageService.getBoolean(READONLY_STATE_KEY, StorageScope.PROFILE, false);
 	}
 
 	hasActiveEditor(): boolean {

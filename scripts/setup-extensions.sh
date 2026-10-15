@@ -32,15 +32,31 @@ prune_excluded_extensions() {
 }
 
 
-# Markdown WYSIWYG (VS Code Markdown Editor) needs the prebuilt
-# markdown-editor-out webview from a VS Code ≥ 1.135 install. Source
-# tarballs from GitHub do not include it — only product builds do. If the
-# catalog came from a local editor that is too old, pull just the four
-# markdown-related builtins from the matching VS Code linux package.
+hide_broken_markdown_palette_commands() {
+  local md_pkg="$EXTENSIONS_DIR/markdown-language-features/package.json"
+  [[ -f "$md_pkg" ]] || return 0
+  python3 - "$md_pkg" <<'HIDEPY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p))
+menus = d.setdefault("contributes", {}).setdefault("menus", {}).setdefault("commandPalette", [])
+found = False
+for m in menus:
+    if m.get("command") == "_markdown.openFrontMatterSettings":
+        m["when"] = "false"
+        found = True
+if not found:
+    menus.insert(0, {"command": "_markdown.openFrontMatterSettings", "when": "false"})
+json.dump(d, open(p, "w"), indent="\t")
+open(p, "a").write("\n")
+HIDEPY
+}
+
 ensure_markdown_editor_assets() {
   local editor_js="$EXTENSIONS_DIR/markdown-language-features/markdown-editor-out/editor.js"
   if [[ -f "$editor_js" ]]; then
     echo "Markdown Editor webview present ($(du -sh "$EXTENSIONS_DIR/markdown-language-features/markdown-editor-out" | cut -f1))."
+    hide_broken_markdown_palette_commands
     return 0
   fi
   echo "Markdown Editor webview missing — fetching from VS Code ${VSCODE_VERSION}…"
@@ -57,7 +73,9 @@ ensure_markdown_editor_assets() {
       echo "Installed $name from VS Code ${VSCODE_VERSION}."
     fi
   done
+  hide_broken_markdown_palette_commands
 }
+
 
 if [[ -d "$EXTENSIONS_DIR" && "$(ls -A "$EXTENSIONS_DIR" 2>/dev/null | wc -l)" -gt 10 ]]; then
   prune_excluded_extensions
