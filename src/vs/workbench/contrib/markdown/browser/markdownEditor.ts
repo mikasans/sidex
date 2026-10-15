@@ -460,6 +460,8 @@ export class MarkdownEditorManager extends Disposable {
 			},
 			contentOptions: {
 				allowScripts: true,
+				// Host inject + our bootstrap may both define the API; avoid throw.
+				allowMultipleAPIAcquire: true,
 				localResourceRoots: (() => {
 					const roots = [URI.joinPath(resource, '..')];
 					try {
@@ -586,6 +588,43 @@ export class MarkdownEditorManager extends Disposable {
 			});
 			var ed = document.getElementById('editor');
 			if (ed) { obs.observe(ed, { childList: true, subtree: true }); }
+			// If the host's un-nonced _vscodeApiScript was blocked by our CSP
+			// nonce, install the same bridge here (nonced script) before import.
+			if (typeof acquireVsCodeApi !== 'function') {
+				try {
+					var parentPost = window.parent && window.parent['__vscode_post_message__'];
+					if (typeof parentPost === 'function') {
+						var originalPostMessage = parentPost.bind(window.parent);
+						var acquired = false;
+						globalThis.acquireVsCodeApi = function () {
+							if (acquired) {
+								throw new Error('An instance of the VS Code API has already been acquired');
+							}
+							acquired = true;
+							return Object.freeze({
+								postMessage: function (message, transfer) {
+									originalPostMessage('onmessage', { message: message, transfer: transfer }, transfer);
+								},
+								setState: function (newState) {
+									originalPostMessage('do-update-state', JSON.stringify(newState));
+									return newState;
+								},
+								getState: function () { return undefined; }
+							});
+						};
+						window.parent = window;
+						window.top = window;
+						window.frameElement = null;
+						console.info('[Markdown Editor] installed acquireVsCodeApi fallback (host inject missing/blocked)');
+					} else {
+						reportBootstrapFail('acquireVsCodeApi missing and parent __vscode_post_message__ unavailable');
+						return;
+					}
+				} catch (bridgeErr) {
+					reportBootstrapFail('acquireVsCodeApi fallback failed: ' + (bridgeErr && (bridgeErr.message || bridgeErr)));
+					return;
+				}
+			}
 			// document.write + <script type="module" src> often never runs on
 			// WKWebView. Classic script + dynamic import() does.
 			import(scriptUri).catch(function (err) {

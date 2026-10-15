@@ -85,6 +85,18 @@ step(
     editor.includes('reportBootstrapFail')
 );
 step(
+  'webviewPre.nonceApiScriptForCsp',
+  srcPre.includes('vscode-markdown-editor-script-nonce') &&
+    srcPre.includes("defaultScript.setAttribute('nonce', nonce)") &&
+    pubPre.includes("defaultScript.setAttribute('nonce', nonce)")
+);
+step(
+  'mdEditor.acquireVsCodeApiFallback',
+  editor.includes("installed acquireVsCodeApi fallback") &&
+    editor.includes("__vscode_post_message__") &&
+    editor.includes('allowMultipleAPIAcquire: true')
+);
+step(
   'mdPreview.inlineImageWarnOnce',
   preview.includes('warnInlineImageOnce') &&
     preview.includes('Could not inline relative image as data URI')
