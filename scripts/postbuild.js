@@ -111,6 +111,22 @@ const KATEX_DEST = path.join(DIST_DIR, 'katex');
 if (fs.existsSync(KATEX_SRC)) {
 	fs.cpSync(KATEX_SRC, KATEX_DEST, { recursive: true, force: true });
 	console.log(`Post-build: copied the katex stylesheet + fonts to ${KATEX_DEST}\n`);
+
+	// Prefer block display so first paint waits for KaTeX metrics (fewer superscript overlaps).
+	try {
+		const katexCss = path.join(KATEX_DEST, 'katex.min.css');
+		if (fs.existsSync(katexCss)) {
+			let css = fs.readFileSync(katexCss, 'utf8');
+			if (!css.includes('font-display')) {
+				css = css.replace(/@font-face\s*\{/g, '@font-face{font-display:block;');
+				fs.writeFileSync(katexCss, css);
+				console.log('Post-build: injected font-display:block into katex.min.css');
+			}
+		}
+	} catch (e) {
+		console.warn('Post-build: could not patch katex font-display', e);
+	}
+
 } else {
 	console.warn('Post-build: node_modules/katex not found — markdown math will not render in this build\n');
 }

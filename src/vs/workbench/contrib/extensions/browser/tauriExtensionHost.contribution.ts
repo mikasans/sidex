@@ -1358,6 +1358,13 @@ class TauriExtensionHostContribution extends Disposable implements IWorkbenchCon
 		this._request('resetPanels', {}, { timeoutMs: 3000, allowBeforeHandshake: true }).catch(() => {});
 
 		for (const ext of msg.extensions) {
+			const idKey = (ext.id || '').toLowerCase();
+			if (TauriExtensionHostContribution.SKIP_ACTIVATE_EXTENSION_IDS.has(idKey)) {
+				this.logService.info(
+					`[ExtHost] Skip activate ${ext.id} (SideX denylist — use built-in PDF Preview; avoids MD UI nags)`
+				);
+				continue;
+			}
 			this._send({ id: this._nextId(), type: 'activateExtension', params: { extensionId: ext.id } });
 		}
 
@@ -3286,6 +3293,15 @@ class TauriExtensionHostContribution extends Disposable implements IWorkbenchCon
 		'vscode.markdown.preview.editor',
 		'sidex.markdown.preview', // legacy id (pre-VS Code parity)
 		'sidex.pdf.preview',
+	]);
+
+	/**
+	 * Marketplace extensions that must not activate in SideX. `mathematic.vscode-pdf`
+	 * paints a "Support Mathematic" nag over MD tabs; SideX already ships
+	 * `sidex.pdf.preview` and skips foreign PDF customEditors in Open With.
+	 */
+	private static readonly SKIP_ACTIVATE_EXTENSION_IDS = new Set<string>([
+		'mathematic.vscode-pdf',
 	]);
 
 	private _registerExtensionCustomEditor(ce: {

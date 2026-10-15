@@ -284,9 +284,15 @@ export class MarkdownPreviewManager extends Disposable {
 	//#region --- public API (commands) ---
 
 	showPreview(side?: boolean, preserveFocus = true): void {
-		const resource = this._activeMarkdownResource();
+		const resource = this._activeMarkdownResource() ?? this._currentResource;
 		if (!resource) {
 			this._logService.warn('[Markdown Preview] Active editor is not a markdown file');
+			this._notificationService.info(
+				localize(
+					'markdownPreviewNeedFile',
+					'Open a Markdown file first, then press Ctrl+K V (⌘K V) for preview beside the source.'
+				)
+			);
 			return;
 		}
 		this._currentResource = resource;
@@ -617,7 +623,12 @@ export class MarkdownPreviewManager extends Disposable {
 	private _activeMarkdownResource(): URI | undefined {
 		const editor = this._editorService.activeEditor;
 		const resource = editor instanceof EditorInput ? editor.resource : undefined;
-		if (!resource || !resource.path.toLowerCase().endsWith('.md')) {
+		if (!resource) {
+			return undefined;
+		}
+		const lower = resource.path.toLowerCase();
+		const mdExt = ['.md', '.markdown', '.mdx', '.mdtxt', '.mdtext'];
+		if (!mdExt.some(ext => lower.endsWith(ext))) {
 			return undefined;
 		}
 		return resource;
@@ -794,15 +805,50 @@ export class MarkdownPreviewManager extends Disposable {
 			.sidex-preview-fallback {
 				white-space: pre-wrap;
 			}
-			/* Reduce KaTeX display overlap when fonts load late on WKWebView */
+			/* KaTeX: room for superscripts + less overlap while fonts load (WKWebView) */
+			.katex {
+				font-size: 1.05em;
+				line-height: 1.2;
+				vertical-align: baseline;
+				text-indent: 0;
+			}
+			.katex .vlist-t {
+				display: inline-table;
+			}
 			.katex-display {
 				overflow-x: auto;
 				overflow-y: hidden;
-				padding: 0.15em 0;
+				padding: 0.35em 0;
+				margin: 0.6em 0;
 			}
 			.katex-display > .katex {
 				text-align: center;
 				white-space: nowrap;
+				display: inline-block;
+				max-width: 100%;
+			}
+			.vscode-katex-container {
+				line-height: inherit;
+				display: inline;
+			}
+			/* Task lists: hide disc bullets so checkboxes are the only glyph */
+			ul:has(> li > input[type="checkbox"]),
+			ul:has(> li > p > input[type="checkbox"]) {
+				list-style: none;
+				padding-left: 1.4em;
+			}
+			li:has(> input[type="checkbox"]),
+			li:has(> p > input[type="checkbox"]) {
+				list-style: none;
+			}
+			li input[type="checkbox"] {
+				margin: 0 0.45em 0 0;
+				vertical-align: middle;
+				width: 1em;
+				height: 1em;
+				accent-color: var(--vscode-checkbox-background, #4c8bf5);
+				-webkit-appearance: checkbox;
+				appearance: checkbox;
 			}
 			${settings.customStyles}`;
 
