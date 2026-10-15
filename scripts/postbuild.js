@@ -51,6 +51,16 @@ if (fs.existsSync('extensions-meta.json')) {
 }
 console.log('Post-build: copied extensions\n');
 
+const mdEditorJs = path.join(DIST_DIR, 'extensions', 'markdown-language-features', 'markdown-editor-out', 'editor.js');
+if (!fs.existsSync(mdEditorJs)) {
+	console.error(
+		'Post-build: markdown-editor-out/editor.js missing — Markdown Editor (WYSIWYG) would stay blank. Run bash scripts/setup-extensions.sh'
+	);
+	process.exit(1);
+}
+console.log('Post-build: markdown-editor-out present\n');
+
+
 // File icons require theme-seti under dist/extensions (E2E + packaged builds).
 const setiWoff = path.join(DIST_DIR, 'extensions', 'theme-seti', 'icons', 'seti.woff');
 const setiJson = path.join(DIST_DIR, 'extensions', 'theme-seti', 'icons', 'vs-seti-icon-theme.json');

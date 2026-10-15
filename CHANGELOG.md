@@ -1,5 +1,13 @@
 ## Unreleased
 
+### Fixed
+- **macOS Markdown Preview relative images**: Strict sanitizer no longer strips workspace-relative `img src` before rewrite; on Tauri, small local images are inlined as `data:` URIs (WKWebView nested iframes often fail custom schemes). Also prefer Tauri `convertFileSrc` / `asset.localhost` when available.
+- **macOS Markdown Editor (WYSIWYG) blank pane**: load `markdown-editor-out` via classic-script `import()` instead of `<script type="module" src>` after `document.write` (WKWebView), and use the asset pack as `<base>` instead of `file://`.
+- **Product defaults**: `.md` opens the text editor (not WYSIWYG); `.pdf` opens `sidex.pdf.preview`. WYSIWYG remains available via Open With.
+
+### Changed
+- Minor KaTeX display CSS to reduce overlap when fonts settle late on WKWebView.
+
 ### Fixed / Improved
 - Markdown Preview default `markdown.preview.fontSize` raised to **16**; macOS `editor.fontSize` default raised to **14** for readability.
 - Webview host and Markdown Editor show a bilingual empty/loading hint instead of a pure black pane when content is slow or fails to load.

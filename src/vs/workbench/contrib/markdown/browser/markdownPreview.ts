@@ -24,6 +24,8 @@ import { ICodeEditorService } from '../../../../editor/browser/services/codeEdit
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
+import { IFileService } from '../../../../platform/files/common/files.js';
+import { encodeBase64 } from '../../../../base/common/buffer.js';
 import { renderMarkdownDocument, DEFAULT_MARKDOWN_STYLES } from './markdownDocumentRenderer.js';
 import { katexStylesheetHref, MarkedKatexSupport } from './markedKatexSupport.js';
 
@@ -38,7 +40,8 @@ const HAS_SCHEME = /^\w[\w\d+.-]*:/;
 
 /**
  * Preview content trust level, mirroring `markdown.previewSecurity` in VS Code.
- * The default only permits `http(s)` links and no relative paths or media.
+ * Strict still allows same-folder relative images/media (rewritten for the
+ * webview); remote http images stay gated by the stricter levels.
  */
 export enum MarkdownPreviewSecurityLevel {
 	Strict = 'strict',
@@ -56,6 +59,32 @@ function resolveMarkdownUri(baseDir: URI, href: string): URI {
 	return URI.joinPath(baseDir, href);
 }
 
+function guessImageMime(resource: URI): string {
+	const lower = resource.path.toLowerCase();
+	if (lower.endsWith('.png')) {
+		return 'image/png';
+	}
+	if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+		return 'image/jpeg';
+	}
+	if (lower.endsWith('.gif')) {
+		return 'image/gif';
+	}
+	if (lower.endsWith('.svg')) {
+		return 'image/svg+xml';
+	}
+	if (lower.endsWith('.webp')) {
+		return 'image/webp';
+	}
+	if (lower.endsWith('.ico')) {
+		return 'image/x-icon';
+	}
+	return 'application/octet-stream';
+}
+
+/** Cap for inlining local images as data: URIs (WKWebView nested iframes). */
+const INLINE_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
+
 function rewriteImageSrcs(html: string, baseDir: URI): string {
 	return html.replace(
 		/<img\s+([^>]*?)src="([^"]*?)"([^>]*)>/gi,
@@ -68,6 +97,52 @@ function rewriteImageSrcs(html: string, baseDir: URI): string {
 			return `<img ${before}src="${webviewSafe.toString(true)}"${after}>`;
 		}
 	);
+}
+
+/**
+ * On Tauri/WKWebView, custom-scheme image URLs inside the nested fake.html
+ * iframe often fail even when sidex-asset is registered. Inline small local
+ * files as data: URIs so classic Preview shows relative images without SW.
+ */
+async function rewriteImageSrcsForTauri(
+	html: string,
+	baseDir: URI,
+	fileService: IFileService,
+	logService: ILogService
+): Promise<string> {
+	if (!(globalThis as any).__SIDEX_TAURI__) {
+		return rewriteImageSrcs(html, baseDir);
+	}
+	const re = /<img\s+([^>]*?)src="([^"]*?)"([^>]*)>/gi;
+	const parts: string[] = [];
+	let last = 0;
+	let match: RegExpExecArray | null;
+	while ((match = re.exec(html)) !== null) {
+		parts.push(html.slice(last, match.index));
+		const before = match[1];
+		const src = match[2];
+		const after = match[3];
+		if (HAS_SCHEME.test(src) || src.startsWith('data:')) {
+			parts.push(match[0]);
+		} else {
+			const resolved = resolveMarkdownUri(baseDir, src);
+			let href = asWebviewUri(resolved).toString(true);
+			if (resolved.scheme === 'file') {
+				try {
+					const file = await fileService.readFile(resolved);
+					if (file.value.byteLength > 0 && file.value.byteLength <= INLINE_IMAGE_MAX_BYTES) {
+						href = `data:${guessImageMime(resolved)};base64,${encodeBase64(file.value)}`;
+					}
+				} catch (err) {
+					logService.trace('[Markdown Preview] Could not inline image', resolved.toString(), err);
+				}
+			}
+			parts.push(`<img ${before}src="${href}"${after}>`);
+		}
+		last = match.index + match[0].length;
+	}
+	parts.push(html.slice(last));
+	return parts.join('');
 }
 
 function escapeHtml(value: string): string {
@@ -167,7 +242,8 @@ export class MarkdownPreviewManager extends Disposable {
 		@ILanguageService private readonly _languageService: ILanguageService,
 		@ICodeEditorService private readonly _codeEditorService: ICodeEditorService,
 		@IOpenerService private readonly _openerService: IOpenerService,
-		@INotificationService private readonly _notificationService: INotificationService
+		@INotificationService private readonly _notificationService: INotificationService,
+		@IFileService private readonly _fileService: IFileService
 	) {
 		super();
 	}
@@ -647,7 +723,7 @@ export class MarkdownPreviewManager extends Disposable {
 			body = `<pre class="sidex-preview-fallback">${escapeHtml(text)}</pre>`;
 		}
 
-		const withImages = rewriteImageSrcs(body, baseDir);
+		const withImages = await rewriteImageSrcsForTauri(body, baseDir, this._fileService, this._logService);
 		const settings = this._getPreviewSettings();
 		// Prefer a same-origin /katex URL. asWebviewUri → vscode-cdn needs the
 		// webview service worker; on macOS WKWebView that SW is skipped so the
@@ -681,6 +757,16 @@ export class MarkdownPreviewManager extends Disposable {
 			.sidex-preview-fallback {
 				white-space: pre-wrap;
 			}
+			/* Reduce KaTeX display overlap when fonts load late on WKWebView */
+			.katex-display {
+				overflow-x: auto;
+				overflow-y: hidden;
+				padding: 0.15em 0;
+			}
+			.katex-display > .katex {
+				text-align: center;
+				white-space: nowrap;
+			}
 			${settings.customStyles}`;
 
 		return `<!DOCTYPE html>
@@ -688,7 +774,7 @@ export class MarkdownPreviewManager extends Disposable {
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src * data: blob: sidex-asset: asset:; media-src * data: blob: sidex-asset: asset:; font-src * data: sidex-asset:; style-src * 'unsafe-inline' sidex-asset:; script-src 'unsafe-inline';">
+	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src * data: blob: sidex-asset: asset: https://asset.localhost http://asset.localhost; media-src * data: blob: sidex-asset: asset: https://asset.localhost http://asset.localhost; font-src * data: sidex-asset: https://asset.localhost https://tauri.localhost; style-src * 'unsafe-inline' sidex-asset: https://asset.localhost https://tauri.localhost; script-src 'unsafe-inline';">
 	${katexStyles}
 	<style>${previewStyles}</style>
 	<style>${DEFAULT_MARKDOWN_STYLES}</style>
@@ -754,7 +840,13 @@ export class MarkdownPreviewManager extends Disposable {
 					allowRelativeMediaPaths: true
 				};
 			default:
-				return undefined;
+				// Workspace-relative images are expected in Markdown Preview (VS Code
+				// parity). Without allowRelativeMediaPaths the sanitizer strips src
+				// and the pane shows alt text only — before rewriteImageSrcs runs.
+				return {
+					allowRelativeLinkPaths: true,
+					allowRelativeMediaPaths: true
+				};
 		}
 	}
 

@@ -49,10 +49,34 @@ step(
     asWebview.includes('Schemas.file')
 );
 step(
+  'asWebviewUri.tauriPrefersConvertFileSrc',
+  asWebview.includes('convertFileSrc') && asWebview.includes('asset.localhost')
+);
+step(
   'csp.sidexAssetAllowed',
   preview.includes('sidex-asset:') &&
     srcPre.includes('sidex-asset:') &&
     asWebview.includes('sidex-asset:')
+);
+step(
+  'mdPreview.allowsRelativeMediaByDefault',
+  preview.includes('allowRelativeMediaPaths: true') &&
+    preview.includes('rewriteImageSrcsForTauri')
+);
+const editor = read('src/vs/workbench/contrib/markdown/browser/markdownEditor.ts');
+step(
+  'mdEditor.dynamicImportBootstrap',
+  editor.includes('import(scriptUri)') &&
+    editor.includes('`${assetBase}/`') &&
+    !editor.includes('type="module" src="${scriptUri}"')
+);
+const contrib = read('src/vs/workbench/contrib/markdown/browser/markdown.contribution.ts');
+step(
+  'mdDefaults.textEditorNotWysiwyg',
+  contrib.includes("registerDefaultConfigurations") &&
+    contrib.includes("'*.md': DEFAULT_EDITOR_ASSOCIATION.id") &&
+    contrib.includes("'*.pdf': 'sidex.pdf.preview'") &&
+    !contrib.includes("'*.md': MARKDOWN_EDITOR_VIEW_TYPE")
 );
 
 const postbuild = read('scripts/postbuild.js');

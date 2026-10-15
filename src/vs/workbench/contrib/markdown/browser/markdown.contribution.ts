@@ -28,6 +28,7 @@ import { MARKDOWN_PREVIEW_VIEW_TYPE, MarkdownPreviewManager } from './markdownPr
 import { MARKDOWN_EDITOR_VIEW_TYPE, MarkdownEditorManager } from './markdownEditor.js';
 import { MarkdownDiffEditorManager } from './markdownDiffEditor.js';
 import { SideBySideEditorInput } from '../../../common/editor/sideBySideEditorInput.js';
+import { DEFAULT_EDITOR_ASSOCIATION } from '../../../common/editor.js';
 import {
 	IEditorResolverService,
 	RegisteredEditorPriority
@@ -459,6 +460,24 @@ MenuRegistry.appendMenuItem(MenuId.EditorTitle, {
 		ContextKeyExpr.and(MARKDOWN_LANG_WHEN, ContextKeyExpr.equals('resourceExtname', '.md'))
 	)
 });
+
+// Product defaults: .md opens the text editor (not the still-fragile WYSIWYG
+// webview). PDF opens the built-in EmbedPDF preview. Users can still pick
+// Markdown Preview / Markdown Editor via Open With or workbench.editorAssociations.
+Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerDefaultConfigurations([
+	{
+		overrides: {
+			'workbench.editorAssociations': {
+				'*.md': DEFAULT_EDITOR_ASSOCIATION.id,
+				'*.markdown': DEFAULT_EDITOR_ASSOCIATION.id,
+				'*.mdx': DEFAULT_EDITOR_ASSOCIATION.id,
+				'*.mdtxt': DEFAULT_EDITOR_ASSOCIATION.id,
+				'*.mdtext': DEFAULT_EDITOR_ASSOCIATION.id,
+				'*.pdf': 'sidex.pdf.preview'
+			}
+		}
+	}
+]);
 
 Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
 	id: 'markdown',

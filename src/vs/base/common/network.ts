@@ -326,6 +326,16 @@ class FileAccessImpl {
 		}
 
 		if (uri.scheme === Schemas.file && (globalThis as any).__SIDEX_TAURI__) {
+			try {
+				const convert = (globalThis as any).__TAURI_INTERNALS__?.convertFileSrc as
+					| ((path: string, protocol?: string) => string)
+					| undefined;
+				if (typeof convert === 'function') {
+					return URI.parse(convert(uri.fsPath, 'asset'));
+				}
+			} catch {
+				/* fall through */
+			}
 			const encoded = encodeURIComponent(uri.fsPath);
 			return URI.parse(`sidex-asset://localhost/${encoded}`);
 		}

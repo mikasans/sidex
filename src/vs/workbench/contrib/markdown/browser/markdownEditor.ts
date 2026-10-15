@@ -460,10 +460,17 @@ export class MarkdownEditorManager extends Disposable {
 			},
 			contentOptions: {
 				allowScripts: true,
-				localResourceRoots: [
-					URI.joinPath(resource, '..')
-					// Same-origin /extensions/… is also used; keep parent dir as a root for images.
-				]
+				localResourceRoots: (() => {
+					const roots = [URI.joinPath(resource, '..')];
+					try {
+						if (typeof window !== 'undefined' && window.location?.origin) {
+							roots.push(URI.parse(window.location.origin));
+						}
+					} catch {
+						/* ignore */
+					}
+					return roots;
+				})()
 			},
 			extension: undefined
 		};
@@ -508,7 +515,14 @@ export class MarkdownEditorManager extends Disposable {
 			richLinksEnabled: false,
 			linkPresentationRules: []
 		});
-		const baseHref = resource.with({ path: resource.path.replace(/[^/]+$/, '') }).toString(true);
+		// Use the asset pack as <base>, not file:// — WKWebView/document.write
+		// cannot load modules or images from a file:// document base, and a
+		// file base also breaks relative chunk resolution after dynamic import.
+		const baseHref = `${assetBase}/`;
+		const origin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
+		const cspHosts = [assetBase, origin, 'https://tauri.localhost', 'https://*.tauri.localhost', 'https://asset.localhost', 'http://asset.localhost']
+			.filter(Boolean)
+			.join(' ');
 
 		return `<!DOCTYPE html>
 <html lang="en">
@@ -516,7 +530,7 @@ export class MarkdownEditorManager extends Disposable {
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 	<meta http-equiv="Content-Security-Policy"
-		content="default-src 'none'; style-src 'self' 'unsafe-inline' ${assetBase} https: data:; font-src 'self' ${assetBase} data:; img-src 'self' https: data: blob:; media-src 'self' https: data: blob:; script-src 'nonce-${nonce}' 'self' ${assetBase}; worker-src 'self' ${assetBase} blob:; connect-src 'self' ${assetBase}; frame-src 'self';" />
+		content="default-src 'none'; style-src 'self' 'unsafe-inline' ${cspHosts} https: data:; font-src 'self' ${cspHosts} data:; img-src 'self' ${cspHosts} https: data: blob: sidex-asset: asset:; media-src 'self' ${cspHosts} https: data: blob: sidex-asset: asset:; script-src 'nonce-${nonce}' 'self' ${cspHosts}; worker-src 'self' ${cspHosts} blob:; connect-src 'self' ${cspHosts}; frame-src 'self';" />
 	<meta name="vscode-markdown-editor-script-nonce" content="${nonce}" />
 	<meta name="vscode-markdown-editor-message-secret" content="${this._messageSecret}" />
 	<meta id="vscode-markdown-editor-initial-state" content="${initialState}" />
@@ -540,16 +554,19 @@ export class MarkdownEditorManager extends Disposable {
 	<script nonce="${nonce}">
 		(function () {
 			var failText = 'Markdown Editor failed to load. Use Open Preview to the Side, or upgrade SideX.\\n编辑器未加载：请改用「打开侧边预览」或升级 SideX。';
-			window.__sidexMdEditorMarkFailed = function () {
+			var scriptUri = ${JSON.stringify(scriptUri)};
+			window.__sidexMdEditorMarkFailed = function (detail) {
 				var h = document.getElementById('sidex-md-editor-empty');
-				if (h) { h.innerHTML = failText.replace(/\\n/g, '<br/>'); }
+				if (h) {
+					h.innerHTML = failText.replace(/\\n/g, '<br/>') + (detail ? '<br/><span style="font-size:0.8em;opacity:0.75">' + String(detail).slice(0, 180) + '</span>' : '');
+				}
 			};
 			setTimeout(function () {
 				var h = document.getElementById('sidex-md-editor-empty');
 				var ed = document.getElementById('editor');
 				if (!h) { return; }
 				if (ed && ed.childElementCount > 0) { h.style.display = 'none'; return; }
-				window.__sidexMdEditorMarkFailed();
+				window.__sidexMdEditorMarkFailed('timeout');
 			}, 8000);
 			var obs = new MutationObserver(function () {
 				var ed = document.getElementById('editor');
@@ -558,9 +575,14 @@ export class MarkdownEditorManager extends Disposable {
 			});
 			var ed = document.getElementById('editor');
 			if (ed) { obs.observe(ed, { childList: true, subtree: true }); }
+			// document.write + <script type="module" src> often never runs on
+			// WKWebView. Classic script + dynamic import() does.
+			import(scriptUri).catch(function (err) {
+				console.error('[Markdown Editor] module load failed', scriptUri, err);
+				window.__sidexMdEditorMarkFailed(err && (err.message || err));
+			});
 		})();
 	</script>
-	<script nonce="${nonce}" type="module" src="${scriptUri}" onerror="window.__sidexMdEditorMarkFailed && window.__sidexMdEditorMarkFailed()"></script>
 </body>
 </html>`;
 	}

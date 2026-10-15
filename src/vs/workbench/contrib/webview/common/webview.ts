@@ -25,7 +25,7 @@ export const webviewRootResourceAuthority = `vscode-resource.${webviewResourceBa
 export const webviewGenericCspSource =
 	`'self' https://*.${webviewResourceBaseHost}` +
 	((globalThis as any).__SIDEX_TAURI__
-		? ' tauri: https://tauri.localhost https://*.tauri.localhost asset: sidex-asset:'
+		? ' tauri: https://tauri.localhost https://*.tauri.localhost https://asset.localhost http://asset.localhost asset: sidex-asset:'
 		: '');
 
 /**
@@ -46,7 +46,8 @@ export function asWebviewUri(resource: URI, remoteInfo?: WebviewRemoteInfo): URI
 		resource.scheme === Schemas.http ||
 		resource.scheme === Schemas.https ||
 		resource.scheme === Schemas.tauri ||
-		resource.scheme === 'sidex-asset'
+		resource.scheme === 'sidex-asset' ||
+		resource.scheme === 'asset'
 	) {
 		return resource;
 	}
@@ -61,9 +62,20 @@ export function asWebviewUri(resource: URI, remoteInfo?: WebviewRemoteInfo): URI
 
 	// Tauri macOS WKWebView skips the webview service worker (controllerchange
 	// often never fires on https://tauri.localhost). vscode-cdn resource URLs
-	// therefore never resolve. Serve local files via the sidex-asset protocol
-	// registered in src-tauri (same path FileAccess.uriToBrowserUri uses).
+	// therefore never resolve. Prefer Tauri's built-in asset protocol (HTTPS
+	// asset.localhost when useHttpsScheme is on — loads inside nested iframes
+	// more reliably than a custom scheme). Fall back to sidex-asset://.
 	if ((globalThis as any).__SIDEX_TAURI__ && resource.scheme === Schemas.file) {
+		try {
+			const convert = (globalThis as any).__TAURI_INTERNALS__?.convertFileSrc as
+				| ((path: string, protocol?: string) => string)
+				| undefined;
+			if (typeof convert === 'function') {
+				return URI.parse(convert(resource.fsPath, 'asset'));
+			}
+		} catch {
+			/* fall through */
+		}
 		const encoded = encodeURIComponent(resource.fsPath);
 		return URI.parse(`sidex-asset://localhost/${encoded}`);
 	}
