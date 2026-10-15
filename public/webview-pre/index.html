@@ -938,6 +938,15 @@
 				const defaultScript = newDocument.createElement('script');
 				defaultScript.id = '_vscodeApiScript';
 				defaultScript.textContent = getVsCodeApiScript(options.allowMultipleAPIAcquire, data.state);
+				// If the page CSP uses script-src 'nonce-…' (Markdown Editor), an
+				// un-nonced inline inject is blocked — acquireVsCodeApi never
+				// appears and TipTap stays blank. Copy a nonce from the document.
+				const nonceMeta = newDocument.querySelector('meta[name="vscode-markdown-editor-script-nonce"], meta[name="vscode-resource-nonce"]');
+				const noncedScript = newDocument.querySelector('script[nonce]');
+				const nonce = (nonceMeta && nonceMeta.getAttribute('content')) || (noncedScript && noncedScript.getAttribute('nonce'));
+				if (nonce) {
+					defaultScript.setAttribute('nonce', nonce);
+				}
 				newDocument.head.prepend(defaultScript);
 			}
 

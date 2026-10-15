@@ -1,5 +1,8 @@
 ## Unreleased
 
+### Fixed
+- **macOS Markdown Editor (WYSIWYG) blank / broken after open**: webview host injected `acquireVsCodeApi` as an un-nonced inline script while the editor CSP used `script-src 'nonce-…'`, so the bridge was blocked (Preview uses `'unsafe-inline'` and was fine). Host now copies the document nonce onto `_vscodeApiScript`; editor bootstrap also installs an `acquireVsCodeApi` fallback before `import(editor.js)`.
+
 ### Improved
 - **Diagnosable Markdown/webview blank hangs**: Markdown Editor bootstrap/import failures post `bootstrapFailed` to the host (`_logService.warn`); relative-image data-URI inline misses warn once per resource; Preview logs when HTML is set / model defer; webview host `console.warn`s Safari SW skip (existing), SW ready timeout, and 8s content-never-arrived.
 
