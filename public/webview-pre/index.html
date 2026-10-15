@@ -61,6 +61,7 @@
 				hint.style.display = 'none';
 				return;
 			}
+			console.warn('[SideX webview] Content never arrived after 8s (id=' + ID + ', SW disabled=' + disableServiceWorkerRuntime + ', Safari=' + !!isSafari + '). Pane will stay on empty hint until host setHtml runs.');
 			hint.innerHTML = '<div style="max-width:28rem;opacity:0.9;"><div style="font-size:16px;margin-bottom:8px;">预览未加载 / Preview did not load</div><div style="font-size:13px;opacity:0.8;">内容迟迟未到达。请升级 SideX，或清除缓存后重试（~/Library/Caches/dev.sidex.app）。<br/>Content never arrived. Upgrade SideX, or clear ~/Library/Caches/dev.sidex.app and retry.</div></div>';
 		}, 8000);
 
@@ -361,7 +362,7 @@
 
 			// Never block content forever if controllerchange never arrives (non-Safari WebKit, etc.).
 			setTimeout(() => {
-				console.warn('Webview service worker ready timed out; continuing so preview content can render.');
+				console.warn('Webview service worker ready timed out after 2500ms (id=' + ID + '); continuing so preview content can render.');
 				resolve();
 			}, 2500);
 		});
