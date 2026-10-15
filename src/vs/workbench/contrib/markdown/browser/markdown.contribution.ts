@@ -15,7 +15,8 @@ import { IInstantiationService, ServicesAccessor } from '../../../../platform/in
 import { KeybindingsRegistry, KeybindingWeight } from '../../../../platform/keybinding/common/keybindingsRegistry.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
 import { IPreferencesService } from '../../../services/preferences/common/preferences.js';
-import { IStorageService } from '../../../../platform/storage/common/storage.js';
+import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
+import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { KeyChord, KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { EditorInput } from '../../../common/editor/editorInput.js';
@@ -342,10 +343,12 @@ MenuRegistry.appendMenuItem(MenuId.EditorTitle, {
 	when: MARKDOWN_LANG_WHEN
 });
 
+// No `when` on these chords: with folder-only / non-MD focus VS Code would
+// otherwise report "The key combination … is not a command". Empty-state UX
+// lives in MarkdownPreviewManager.showPreview (notify / reuse last MD).
 KeybindingsRegistry.registerCommandAndKeybindingRule({
 	id: 'markdown.showPreviewToSide',
 	weight: KeybindingWeight.WorkbenchContrib,
-	when: MARKDOWN_LANG_WHEN,
 	// Match VS Code markdown-language-features: chord Ctrl/Cmd+K then V.
 	primary: KeyChord(KeyMod.CtrlCmd | KeyCode.KeyK, KeyCode.KeyV),
 	mac: { primary: KeyChord(KeyMod.WinCtrl | KeyCode.KeyK, KeyCode.KeyV) },
@@ -357,7 +360,6 @@ KeybindingsRegistry.registerCommandAndKeybindingRule({
 KeybindingsRegistry.registerCommandAndKeybindingRule({
 	id: 'markdown.togglePreview',
 	weight: KeybindingWeight.WorkbenchContrib,
-	when: MARKDOWN_LANG_WHEN,
 	primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyV,
 	mac: { primary: KeyMod.WinCtrl | KeyMod.Shift | KeyCode.KeyV },
 	handler: accessor => {
@@ -486,6 +488,60 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 		}
 	}
 ]);
+
+/**
+ * UX-08: one-shot clear of stale `*.md` → Markdown Editor associations from earlier
+ * experiments. Product default stays text editor; users may re-associate later
+ * without this fighting them on every startup.
+ */
+class MarkdownStaleAssociationMigration extends Disposable implements IWorkbenchContribution {
+	static readonly ID = 'workbench.contrib.markdownStaleAssociationMigration';
+	private static readonly DONE_KEY = 'sidex.markdown.clearedWysiwygAssociation.v1';
+
+	constructor(
+		@IConfigurationService configurationService: IConfigurationService,
+		@IStorageService storageService: IStorageService,
+		@INotificationService notificationService: INotificationService
+	) {
+		super();
+		if (storageService.getBoolean(MarkdownStaleAssociationMigration.DONE_KEY, StorageScope.PROFILE, false)) {
+			return;
+		}
+		const raw = configurationService.getValue<Record<string, string>>('workbench.editorAssociations') ?? {};
+		const assoc = { ...raw };
+		let changed = false;
+		const stale = new Set([MARKDOWN_EDITOR_VIEW_TYPE, 'vscode.markdown.editor']);
+		for (const [pattern, viewType] of Object.entries(assoc)) {
+			if (typeof viewType === 'string' && stale.has(viewType)) {
+				assoc[pattern] = DEFAULT_EDITOR_ASSOCIATION.id;
+				changed = true;
+			}
+		}
+		storageService.store(
+			MarkdownStaleAssociationMigration.DONE_KEY,
+			true,
+			StorageScope.PROFILE,
+			StorageTarget.MACHINE
+		);
+		if (!changed) {
+			return;
+		}
+		void configurationService.updateValue('workbench.editorAssociations', assoc).then(() => {
+			notificationService.info(
+				localize(
+					'markdownAssociationReset',
+					'Markdown files now open in the text editor by default. Use Reopen With → Markdown Editor for WYSIWYG.'
+				)
+			);
+		});
+	}
+}
+
+registerWorkbenchContribution2(
+	MarkdownStaleAssociationMigration.ID,
+	MarkdownStaleAssociationMigration,
+	WorkbenchPhase.AfterRestored
+);
 
 Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
 	id: 'markdown',

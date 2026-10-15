@@ -114,6 +114,118 @@ step(
 
 const postbuild = read('scripts/postbuild.js');
 step('postbuild.syncWebviewPre', postbuild.includes('webview-pre') && postbuild.includes('WEBVIEW_PRE_SRC'));
+step(
+  'postbuild.katexFontDisplayBlock',
+  postbuild.includes('font-display:block') || postbuild.includes("font-display:block")
+);
+
+// --- Handfeel guards (UX-03/04/05/06/07/08/11 + editable/icons) ---
+step(
+  'mdPreview.chordEmptyStateNotify',
+  preview.includes("markdownPreviewNeedFile") &&
+    preview.includes('Open a Markdown file first') &&
+    preview.includes('_notificationService.info')
+);
+step(
+  'mdPreview.katexSuperscriptCss',
+  preview.includes('.katex {') &&
+    preview.includes('vertical-align: baseline') &&
+    preview.includes('.katex-display')
+);
+step(
+  'mdPreview.taskListCheckboxCss',
+  preview.includes('input[type="checkbox"]') &&
+    preview.includes('list-style: none') &&
+    preview.includes('appearance: checkbox')
+);
+step(
+  'mdDefaults.previewEditorOptionPriority',
+  contrib.includes('RegisteredEditorPriority.option') &&
+    contrib.includes('MARKDOWN_PREVIEW_VIEW_TYPE') &&
+    contrib.includes('MARKDOWN_EDITOR_VIEW_TYPE') &&
+    !contrib.includes('priority: RegisteredEditorPriority.default')
+);
+const chordMarker = contrib.indexOf('No `when` on these chords');
+const chordSlice = chordMarker >= 0 ? contrib.slice(chordMarker, chordMarker + 700) : '';
+step(
+  'mdChord.previewToSideNoWhenGate',
+  chordMarker >= 0 &&
+    chordSlice.includes("id: 'markdown.showPreviewToSide'") &&
+    chordSlice.includes('KeybindingsRegistry.registerCommandAndKeybindingRule') &&
+    !chordSlice.includes('when: MARKDOWN_LANG_WHEN'),
+  chordSlice.slice(0, 160).replace(/\s+/g, ' ')
+);
+step(
+  'mdMigration.clearStaleWysiwygAssociation',
+  contrib.includes('MarkdownStaleAssociationMigration') &&
+    contrib.includes('sidex.markdown.clearedWysiwygAssociation.v1') &&
+    contrib.includes('stale.has(viewType)') &&
+    contrib.includes('DEFAULT_EDITOR_ASSOCIATION.id')
+);
+step(
+  'mdFrontMatter.commandRegistered',
+  contrib.includes("'_markdown.openFrontMatterSettings'") &&
+    contrib.includes('markdown.preview.frontMatter')
+);
+const setupExt = read('scripts/setup-extensions.sh');
+step(
+  'mdFrontMatter.paletteHiddenInSetup',
+  setupExt.includes('hide_broken_markdown_palette_commands') &&
+    setupExt.includes('"_markdown.openFrontMatterSettings"') &&
+    setupExt.includes('"when": "false"')
+);
+const mdPkg = path.join(root, 'extensions/markdown-language-features/package.json');
+if (fs.existsSync(mdPkg)) {
+  const pkg = JSON.parse(fs.readFileSync(mdPkg, 'utf8'));
+  const menus = pkg?.contributes?.menus?.commandPalette || [];
+  const fm = menus.find((m) => m.command === '_markdown.openFrontMatterSettings');
+  step('mdFrontMatter.paletteWhenFalse', !!(fm && fm.when === 'false'), JSON.stringify(fm || null));
+} else {
+  step('mdFrontMatter.paletteWhenFalse', false, 'package.json missing');
+}
+step(
+  'mdEditor.hostKatexCheckboxCss',
+  editor.includes('.katex { font-size: 1.05em') &&
+    editor.includes('.md-checkbox') &&
+    editor.includes('border-radius: 3px !important')
+);
+step(
+  'mdEditor.initialStateReadonlyFalse',
+  editor.includes('readonly: this._readonly') &&
+    /private _readonly = false/.test(editor)
+);
+const docRenderer = read('src/vs/workbench/contrib/markdown/browser/markdownDocumentRenderer.ts');
+step(
+  'mdStyles.gfmTaskListInDefaultStyles',
+  docRenderer.includes('GFM task lists') &&
+    docRenderer.includes('appearance: checkbox')
+);
+const extHost = read('src/vs/workbench/contrib/extensions/browser/tauriExtensionHost.contribution.ts');
+step(
+  'pdfNag.skipMathematicActivate',
+  extHost.includes('SKIP_ACTIVATE_EXTENSION_IDS') &&
+    extHost.includes('mathematic.vscode-pdf') &&
+    extHost.includes('Skip activate')
+);
+// Brand icon ≠ known Tauri placeholder face (byte size + sha of tip brand mark)
+const iconPng = path.join(root, 'src-tauri/icons/icon.png');
+const iconIcns = path.join(root, 'src-tauri/icons/icon.icns');
+const tauriConf = JSON.parse(read('src-tauri/tauri.conf.json'));
+const iconList = tauriConf?.bundle?.icon || [];
+const knownPlaceholderSha = '39c7140e774a6ac6836c4a9236d7863de474a5f68ec3e579bf8a46cd6f707fe0'; // 00-source-icon.png (Tauri face)
+const brandSha = '549154e1edd89543ff91d63ea1695088c1b4304e341a559cc126bc4a19db5bb7'; // tip SideX brand
+let iconOk = false;
+let iconDetail = '';
+if (fs.existsSync(iconPng) && fs.existsSync(iconIcns)) {
+  const buf = fs.readFileSync(iconPng);
+  const sha = crypto.createHash('sha256').update(buf).digest('hex');
+  const icnsInBundle = iconList.some((i) => String(i).includes('icon.icns'));
+  iconOk = sha === brandSha && sha !== knownPlaceholderSha && icnsInBundle;
+  iconDetail = `sha=${sha.slice(0, 12)} size=${buf.length} icnsInBundle=${icnsInBundle}`;
+} else {
+  iconDetail = 'icon.png or icon.icns missing';
+}
+step('brandIcon.packagingTreeNotTauriPlaceholder', iconOk, iconDetail);
 
 const failed = evidence.steps.filter((s) => !s.ok).length;
 evidence.failed = failed;

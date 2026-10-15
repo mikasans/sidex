@@ -547,6 +547,16 @@ export class MarkdownEditorManager extends Disposable {
 			font: ${Math.max(14, editorFontSize)}px/1.5 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 			opacity: 0.9; pointer-events: none; z-index: 1;
 		}
+		/* KaTeX inside TipTap: keep superscripts from colliding while fonts settle */
+		.katex { font-size: 1.05em; line-height: 1.2; vertical-align: baseline; }
+		.katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.35em 0; margin: 0.6em 0; }
+		/* Task checkboxes: square control, not blue circular list glyphs */
+		.md-checkbox {
+			border-radius: 3px !important;
+			width: 16px !important;
+			height: 16px !important;
+		}
+		ul:has(.md-checkbox), li:has(.md-checkbox) { list-style: none; }
 	</style>
 	<title>Markdown Editor</title>
 </head>

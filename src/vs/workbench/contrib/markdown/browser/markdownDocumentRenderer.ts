@@ -155,6 +155,25 @@ pre code {
 		forced-color-adjust: none;
 	}
 }
+
+/* GFM task lists: checkbox only (no disc bullet looking like a blue circle) */
+ul:has(> li > input[type="checkbox"]),
+ul:has(> li > p > input[type="checkbox"]) {
+	list-style: none;
+	padding-left: 1.4em;
+}
+li:has(> input[type="checkbox"]),
+li:has(> p > input[type="checkbox"]) {
+	list-style: none;
+}
+li input[type="checkbox"] {
+	margin: 0 0.45em 0 0;
+	vertical-align: middle;
+	width: 1em;
+	height: 1em;
+	-webkit-appearance: checkbox;
+	appearance: checkbox;
+}
 `;
 
 const defaultAllowedLinkProtocols = Object.freeze([Schemas.http, Schemas.https]);
