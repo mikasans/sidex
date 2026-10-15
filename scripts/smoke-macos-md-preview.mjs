@@ -97,6 +97,11 @@ step(
     editor.includes('allowMultipleAPIAcquire: true')
 );
 step(
+  'mdEditor.defaultEditable',
+  /private _readonly = false/.test(editor) &&
+    /getBoolean\(READONLY_STATE_KEY, StorageScope\.PROFILE, false\)/.test(editor)
+);
+step(
   'mdPreview.inlineImageWarnOnce',
   preview.includes('warnInlineImageOnce') &&
     preview.includes('Could not inline relative image as data URI')

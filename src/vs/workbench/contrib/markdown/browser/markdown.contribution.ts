@@ -14,6 +14,7 @@ import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextke
 import { IInstantiationService, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { KeybindingsRegistry, KeybindingWeight } from '../../../../platform/keybinding/common/keybindingsRegistry.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
+import { IPreferencesService } from '../../../services/preferences/common/preferences.js';
 import { IStorageService } from '../../../../platform/storage/common/storage.js';
 import { KeyChord, KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { Codicon } from '../../../../base/common/codicons.js';
@@ -364,6 +365,13 @@ KeybindingsRegistry.registerCommandAndKeybindingRule({
 	}
 });
 
+CommandsRegistry.registerCommand('_markdown.openFrontMatterSettings', accessor => {
+	// markdown-language-features declares this command for the frontmatter
+	// webview context menu, but the SideX extension host does not activate
+	// that handler — palette / menu invocations threw "command not found".
+	void accessor.get(IPreferencesService).openSettings({ query: 'markdown.preview.frontMatter' });
+});
+
 CommandsRegistry.registerCommand('markdown.openMarkdownEditor', accessor => {
 	getOrCreateEditorManager(accessor).showEditor();
 });
@@ -419,7 +427,7 @@ MenuRegistry.appendMenuItem(MenuId.EditorTitle, {
 MenuRegistry.appendMenuItem(MenuId.EditorTitle, {
 	command: {
 		id: 'markdown.editor.toggleReadonly',
-		title: localize2('mdEditorUnlock', 'Unlock Markdown Editor').value,
+		title: localize2('mdEditorToggleLockTitle', 'Toggle Markdown Editor Lock').value,
 		icon: Codicon.edit
 	},
 	group: 'navigation',
