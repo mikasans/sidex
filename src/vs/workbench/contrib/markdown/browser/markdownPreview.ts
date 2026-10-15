@@ -104,6 +104,17 @@ function rewriteImageSrcs(html: string, baseDir: URI): string {
  * iframe often fail even when sidex-asset is registered. Inline small local
  * files as data: URIs so classic Preview shows relative images without SW.
  */
+/** Warn once per resource so blank/broken relative images are diagnosable without spam. */
+const _inlineImageWarned = new Set<string>();
+
+function warnInlineImageOnce(logService: ILogService, key: string, ...args: unknown[]): void {
+	if (_inlineImageWarned.has(key)) {
+		return;
+	}
+	_inlineImageWarned.add(key);
+	logService.warn(...(args as [string, ...unknown[]]));
+}
+
 async function rewriteImageSrcsForTauri(
 	html: string,
 	baseDir: URI,
@@ -126,15 +137,37 @@ async function rewriteImageSrcsForTauri(
 			parts.push(match[0]);
 		} else {
 			const resolved = resolveMarkdownUri(baseDir, src);
+			const resolvedKey = resolved.toString();
 			let href = asWebviewUri(resolved).toString(true);
 			if (resolved.scheme === 'file') {
 				try {
 					const file = await fileService.readFile(resolved);
-					if (file.value.byteLength > 0 && file.value.byteLength <= INLINE_IMAGE_MAX_BYTES) {
+					if (file.value.byteLength === 0) {
+						warnInlineImageOnce(
+							logService,
+							resolvedKey,
+							'[Markdown Preview] Relative image empty — keeping webview URI (may show alt only)',
+							resolvedKey
+						);
+					} else if (file.value.byteLength > INLINE_IMAGE_MAX_BYTES) {
+						warnInlineImageOnce(
+							logService,
+							resolvedKey,
+							'[Markdown Preview] Relative image too large to inline as data URI — using webview URI',
+							resolvedKey,
+							file.value.byteLength
+						);
+					} else {
 						href = `data:${guessImageMime(resolved)};base64,${encodeBase64(file.value)}`;
 					}
 				} catch (err) {
-					logService.trace('[Markdown Preview] Could not inline image', resolved.toString(), err);
+					warnInlineImageOnce(
+						logService,
+						resolvedKey,
+						'[Markdown Preview] Could not inline relative image as data URI — keeping webview URI (may show alt only)',
+						resolvedKey,
+						err
+					);
 				}
 			}
 			parts.push(`<img ${before}src="${href}"${after}>`);
@@ -678,6 +711,7 @@ export class MarkdownPreviewManager extends Disposable {
 
 		const fileModel = this._textFileService.files.get(resource);
 		if (!fileModel?.isResolved()) {
+			this._logService.info('[Markdown Preview] Defer render — text model not resolved yet', resource.toString());
 			return;
 		}
 
@@ -694,6 +728,9 @@ export class MarkdownPreviewManager extends Disposable {
 					return;
 				}
 				input.webview.setHtml(html);
+				if (resetScroll) {
+					this._logService.info('[Markdown Preview] HTML set', resource.toString(), `${html.length} chars`);
+				}
 				if (resetScroll && this._lastScrollProgress !== undefined) {
 					this._postMessage({ type: 'scrollToProgress', value: this._lastScrollProgress });
 				}

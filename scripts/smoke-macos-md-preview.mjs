@@ -78,6 +78,22 @@ step(
     contrib.includes("'*.pdf': 'sidex.pdf.preview'") &&
     !contrib.includes("'*.md': MARKDOWN_EDITOR_VIEW_TYPE")
 );
+step(
+  'mdEditor.bootstrapFailedHostWarn',
+  editor.includes("type: 'bootstrapFailed'") &&
+    editor.includes("bootstrap/import failed") &&
+    editor.includes('reportBootstrapFail')
+);
+step(
+  'mdPreview.inlineImageWarnOnce',
+  preview.includes('warnInlineImageOnce') &&
+    preview.includes('Could not inline relative image as data URI')
+);
+step(
+  'webviewPre.contentNeverArrivedWarn',
+  srcPre.includes('Content never arrived after 8s') &&
+    srcPre.includes('service worker ready timed out after 2500ms')
+);
 
 const postbuild = read('scripts/postbuild.js');
 step('postbuild.syncWebviewPre', postbuild.includes('webview-pre') && postbuild.includes('WEBVIEW_PRE_SRC'));

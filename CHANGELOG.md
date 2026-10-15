@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Improved
+- **Diagnosable Markdown/webview blank hangs**: Markdown Editor bootstrap/import failures post `bootstrapFailed` to the host (`_logService.warn`); relative-image data-URI inline misses warn once per resource; Preview logs when HTML is set / model defer; webview host `console.warn`s Safari SW skip (existing), SW ready timeout, and 8s content-never-arrived.
+
+
 ### Fixed
 - **macOS Markdown Preview relative images**: Strict sanitizer no longer strips workspace-relative `img src` before rewrite; on Tauri, small local images are inlined as `data:` URIs (WKWebView nested iframes often fail custom schemes). Also prefer Tauri `convertFileSrc` / `asset.localhost` when available.
 - **macOS Markdown Editor (WYSIWYG) blank pane**: load `markdown-editor-out` via classic-script `import()` instead of `<script type="module" src>` after `document.write` (WKWebView), and use the asset pack as `<base>` instead of `file://`.

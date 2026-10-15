@@ -555,18 +555,29 @@ export class MarkdownEditorManager extends Disposable {
 		(function () {
 			var failText = 'Markdown Editor failed to load. Use Open Preview to the Side, or upgrade SideX.\\n编辑器未加载：请改用「打开侧边预览」或升级 SideX。';
 			var scriptUri = ${JSON.stringify(scriptUri)};
-			window.__sidexMdEditorMarkFailed = function (detail) {
+			var reported = false;
+			function reportBootstrapFail(detail) {
 				var h = document.getElementById('sidex-md-editor-empty');
 				if (h) {
 					h.innerHTML = failText.replace(/\\n/g, '<br/>') + (detail ? '<br/><span style="font-size:0.8em;opacity:0.75">' + String(detail).slice(0, 180) + '</span>' : '');
 				}
-			};
+				if (reported) { return; }
+				reported = true;
+				console.warn('[Markdown Editor] bootstrap failed:', detail);
+				try {
+					var api = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
+					if (api) {
+						api.postMessage({ type: 'bootstrapFailed', message: String(detail || 'unknown') });
+					}
+				} catch (e) { /* host may not be ready */ }
+			}
+			window.__sidexMdEditorMarkFailed = reportBootstrapFail;
 			setTimeout(function () {
 				var h = document.getElementById('sidex-md-editor-empty');
 				var ed = document.getElementById('editor');
 				if (!h) { return; }
 				if (ed && ed.childElementCount > 0) { h.style.display = 'none'; return; }
-				window.__sidexMdEditorMarkFailed('timeout');
+				reportBootstrapFail('timeout — editor DOM stayed empty after 8s');
 			}, 8000);
 			var obs = new MutationObserver(function () {
 				var ed = document.getElementById('editor');
@@ -578,8 +589,9 @@ export class MarkdownEditorManager extends Disposable {
 			// document.write + <script type="module" src> often never runs on
 			// WKWebView. Classic script + dynamic import() does.
 			import(scriptUri).catch(function (err) {
+				var detail = 'import failed: ' + scriptUri + ' — ' + (err && (err.message || err));
 				console.error('[Markdown Editor] module load failed', scriptUri, err);
-				window.__sidexMdEditorMarkFailed(err && (err.message || err));
+				reportBootstrapFail(detail);
 			});
 		})();
 	</script>
@@ -646,7 +658,14 @@ export class MarkdownEditorManager extends Disposable {
 				if (typeof message.editEpoch === 'number') {
 					this._editEpoch = message.editEpoch;
 				}
-				this._logService.trace('[Markdown Editor] webview ready');
+				this._logService.info('[Markdown Editor] webview ready', this._currentResource?.toString());
+				break;
+			case 'bootstrapFailed':
+				this._logService.warn(
+					'[Markdown Editor] bootstrap/import failed',
+					this._currentResource?.toString(),
+					message.message ?? 'unknown'
+				);
 				break;
 			case 'edit':
 				void this._applyEdit(message);
